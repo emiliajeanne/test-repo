@@ -1,0 +1,458 @@
+---
+title: "EPID 600 Project Template"
+author: "Your Name"
+output: html_document
+---
+
+
+### Overview
+Older adults in general have higher rates of poor dental health compared to other age groups. The goal of this project was to analyze dental service utilization for older adutls living in the southeaster PA region (5 counties). To this end, Public Health Management Corporation's (PHMC’s) Community Health Data  Base (CHDB) was analyzed to better understand dental service utilization for older adults in this region. My mentors for this project were Dr. John Holmes, suggested dataset for this project and guidance for how to begin the analysis; Dr. Alma Vega, demographer within the UPenn School of Nursing who provided analysis recommendations and guidance through the process; Dr. Allison Buttenheim, behavioral economics professor within the School of Nursing who provided insight for how to model economic factors. The question I sought to address in this analysis was as follows: what factors are associated with dental services utilization by older adults? 
+
+Code for the analysis can be found here: [emiliajeanne](https://github.com/emiliajeanne)
+
+### Introduction 
+Older adults aged 65 years and older have higher rates of poor dental health compared to other age groups. According to analysis of 1999-2004 NHANES data, approximately 20% of older adults have untreated tooth decay (Dye et al., 2007). Prevalence of endentualism is also high in this age group, with approximately 25% and 30% for 65-74 and 75+ years or more (Dye et al., 2007). Furthermore, older adults use dental care services less often compared to other age groups. Research findings from Kiyak & Reichmuth (2005) revealed that older adults have the lowest rate of dental care utilization than for any other age group over eighteen, with a significant percentage having gone more than 5 years since their last dental visit. 
+
+Poor dental health and low dental services utilization rates has many implications for overall health. Poor dental health and endentualism impact speech, eating, nutrition, social involvement, and mental health (EVANS & KLEINMAN, 2000; Kisely, Baghaie, Lalloo, Siskind, & Johnson, 2015; H A Kiyak & Mulligan, 1987; Kressin, Spiro, Bosse, Garcia, & Kazis, 1996; Sabbah et al., 2011). Furthermore, research has found associations between poor oral health and systemic diseases (Jeffcoat, Jeffcoat, Gladowski, Bramson, & Blum, 2014; Persson, Persson, Hollender, & Kiyak, 2004).
+
+Oral health of older adults is often overlooked in clinical settings, but is a critical component to overall health and life quality. Improving utilization of dental health services is fundamental to addressing the dental health disparities for older adults. Health policy developers and researchers are needed at the state and national level to address the insurance related issues. State and county level health policy developers are involved to address issues related to access of dental services in areas with inadequate DMD:population ratios. With dental health associated with overall quality of life and health, health services researchers in dentistry, nursing, and medicine should include dental service access in interventions related to healthcare access. Today the associations between smoking and poor dental health are well known. Health services and implementation science researchers are needed to design, implement, and test better smoking cessation programs tailored for older adults. 
+
+The purpose of this analysis was to understand patterns of dental care utilization for older adults in Southeastern Pennsylvania (including Philadelphia country) in 2014 and the associations with income, overall self-reported health status (including mental health), insurance status, activities of daily living, transportation, and smoking. 
+
+### Methods
+In the first paragraph, describe the data used and general methodological approach. Subsequently, incorporate full R code necessary to retrieve and clean data, and perform analysis. Be sure to include a description of code so that others (including your future self) can understand what you are doing and why.
+
+I downloaded the 2014 CHDB dataset for Southeastern PA. A small dataset was created containing just the variables of interest for this project. 
+
+Based on previous research about the variables associated with dental service utilization, variables related to the following were included: demographic variables, such as sex, age, county, country of origin; economic factors, including income, house ownserhips status, and difficulty paying for housing; health information such as health status,  limitations related to activities of daily living, mental health status, and smoking status; insurance status, such as current coverage and medication coverage; community participation, such number of groups and the feeling of beloning in the community.    
+
+I began the analysis by first examining missing data. Most variables had very little missing data. Income has a large amount of missing data: approximately 33% of respondents did not provide income data. The CHDB admin created a variable for %FPL and assigned NA to <50% of the FPL. However, due to the large number of missing data, income was not included in the analysis.
+Rows with greater than 10% missing data -- that is, rows where more than 10% of the varaibles had missing data -- were dropped from the datset. A total of 11 rows were dropped. 
+
+Existing variables were cleaned to remove unused levels and 3 new categorical varaibles were created based on continuous variables. A binary variable ADA.REC (American Dental Association recommendations. ADA recommends dental visits every 6 months) was created for the main outcome of interest (dental service utilization): if DENTISTA == "One year or less", ADA_REC == within-ADA.  
+
+Projection weights were applied last. The older adult population was oversampled in this survey and thus older adults have their own projection weight (ELDPOPWT).
+
+```{r}
+#----------IMPORT DATA AND CHECK NUMBER OF RECORDS ---------
+library(foreign)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(plyr)
+library(survey)
+library(graphics)
+db = file.choose() #choose file
+Data.2012 = read.spss(db, to.data.frame=TRUE) #load file
+
+nrow(Data.65) #2180 records
+```
+
+
+```{r}
+#--------SUBSET DATA  ---------
+#subset data to include only older adults > 65 years old and remove rows where DENTISTA (main outcome of interest) has missing data
+Data.65 <- dplyr::filter(Data.2012, RESPAGE>=65, DENTISTA!="NA") #filter file to just 65+ and remove all NAs for the DV. NOTE: does not include TRUST, NEIGHBOR, LIVNEIGH, and PHYSREGA.
+
+Data.65.limited<-dplyr::select(Data.65, INTNUM, SERVAREA, DENTISTA, SEX01, AGER2, TRACT10, COUNTY, ELDPOPWT, ORIGIN, RACEA2, RESPMAR, RSPGRAD2, MAINWAGE, INCOME, NPOV50, NPOV100, NPOV150, NPOV200, NUMLIVHH, RENTOWN, HOUSPAY, RESPEMPL, HLTHA5, SOURCEA, USUALGOA, DOCVST3, HOSPERA2, NOTGONE, UTRAN, INSUREDA, NOINS, MEDICAID, MEDICARA, MEDICARB, VACHAMP, SELF, RXCOV, SMOKE, EVERSMOK, CMPTMEA, MENTAL3A, TRETMNTA, PARTICIP, BELONG, UACTIVE, NUMIADL, NUMADL)    
+nrow(Data.65.limited)# 2180 - still same number of rows
+ncol(Data.65.limited) #47 variables
+```
+
+
+```{r}
+#---------IDENTIFY AND REMOVE MISSING DATA----------- 
+#variables with missing data
+missing.varaibles<-sapply(Data.65.limited, function(x) sum(is.na(x))) #most variable have little missing data. Income has a large amount of missing data -- CHDB admin created a variable for %FPL and assigned NA to <50% of the FPL. 
+missing.varaibles
+
+#Rows with missing data
+numNAs <- apply(Data.65.limited, 1, function(x) sum(is.na(x)))
+table(numNAs) #Number of missing per row sorted. Most rows have little missing data, but 2 rows have 11 missing, 3 rows have 9 missing, 6 rows have 8 missing, 13 rows have 7 missing, and 20 rows have 6 missing (12%). BUT TRETMNTA and INCOME should be excluded -- this leaves 11 rows missing 8 variables or more, which is .50% of the total rows.
+
+#Exclude rows with lots of missing data (>10%)
+Data.65.limited = Data.65.limited[numNAs < 8,]
+numNAs <- apply(Data.65.limited, 1, function(x) sum(is.na(x)))
+table(numNAs) 
+nrow(Data.65.limited) #11 rows
+```
+
+
+```{r}
+#-------CLEAN VARIABLES: REMOVE UNUSED LEVELS & CREATE NEW VARIABLES
+
+#---------REMOVE UNUSED LEVELS---------
+#Recoding the COUNTY variable to eliminate the unused levels:
+Data.65.limited$COUNTY <- factor(Data.65.limited$COUNTY, levels=c("Philadelphia","Bucks","Chester","Delaware", "Montgomery"))
+
+#create a county binary variable for use in model 2
+Data.65.limited$COUNTY.Binary<-as.factor(ifelse(Data.65.limited$COUNTY=="Philadelphia", c("Outside-Philly"), c("Philly")))
+table(Data.65.limited$COUNTY.Binary)
+
+#Recoding the HEALTH STATUS (HLTHA5) variable to eliminate the unused levels:
+Data.65.limited$HLTHA5 <- factor(Data.65.limited$HLTHA5, levels=c("Excellent","Very Good","Good", "Fair","Poor"))
+
+#Recoding the RENTOWN variable to eliminate the unused levels:
+Data.65.limited$RENTOWN <- factor(Data.65.limited$RENTOWN, levels=c("Rent","Own","Other arrangement"))
+
+#Recoding the HOUSPAY variable to eliminate the unused levels:
+Data.65.limited$HOUSPAY <- factor(Data.65.limited$HOUSPAY, levels=c("Very difficult","Somewhat difficult","Not very difficult", "Not difficult at all","I do not pay for my housing costs"))
+
+#Recoding the RSPGRAD2 (EDUCATION) variable to eliminate the unused levels:
+Data.65.limited$RSPGRAD2 <- factor(Data.65.limited$RSPGRAD2, levels=c("Less than high school graduate (0 to 11 years)","High school graduate (grade 12 or GED certificate)","Technical, trade or vocational school AFTER high school", "Some college, no four-year degree (includes Associates degree)","College graduate (B.S., B.A., or other four-year degree)", "Post-graduate or professional schooling after college"))
+
+#Recoding the BELONG ("I feel that I belong and am a part of my neighborhood.") variable to eliminate the unused levels:
+Data.65.limited$BELONG <- factor(Data.65.limited$BELONG, levels=c("Strongly Agree", "Agree", "Disagree", "Strongly Disagree"))
+Data.65.limited$PARTICIP<-as.numeric(Data.65.limited$PARTICIP)
+
+#Recoding the AGER2 variable to eliminate the unused levels:
+Data.65.limited$AGER2 <- factor(Data.65.limited$AGER2, levels=c("65-69", "70-74", "75-79", "80-84", "85-89", "90+"))
+
+#-------NEW VARIABLES ------
+#Immigrant status
+Data.65.limited$Immigrant.Stat<-as.factor(ifelse(Data.65.limited$ORIGIN=="United States of America",  c("Non-Immigrant"), c("Immigrant")))
+
+#Binary value for Dental Service Utilization
+Data.65.limited$ADA.REC<-as.factor(ifelse(Data.65.limited$DENTISTA=="One year or less",  c("within-ADA"), c("outside-ADA")))
+contrasts(Data.65.limited$ADA.REC)
+
+#Binary value for use of transportation services: if someone has not heard of transportation services when asked if they've used it, likely have not used these services
+Data.65.limited$UTRAN<- factor(Data.65.limited$UTRAN, levels=c("Yes","No","Not heard of"))
+Data.65.limited$UTRAN<-as.factor(ifelse(Data.65.limited$UTRAN=="Not heard of", c("No"), c("Yes")))
+
+ncol(Data.65.limited) # 3 NEW VARIABLES CREATED FOR A TOTAL OF 47+3 = 50 variables now
+```
+
+
+```{r}
+#--------APPLY PROJECTION WEIGHT -------
+Data.65.W<-svydesign(ids=~INTNUM, weights=~ELDPOPWT,data=Data.65.limited) #weighted dataset.
+```
+
+### Results
+
+Overview of older adults in SEPA:
+The older adult population of SEPA was skewed to the lower age groups: approximately 50% of older adutls in SEPA are between 65-74 years old. The very old (80+) constitute approximately 30% of the population. SEPA has more women than men (60%/40%). White is the most common race in all counties, except Philadelphia. Compared to the other counties, Philadelphia has a larger percentage of Blacks, Latinos, and Asians. 
+
+Unsurprisingly, very few older adults in SEPA are uninsured (~1%). Of the uninsured, all were women. Philly has the majority of uninsured. Within Philly, all were in the 65-69 age group and all had were high school graduates. 100% of the uninsured were non-immigrants. Almost 90% of people living in SEPA have RX coverage. This trend is similar across all counties. 
+
+With regards to economic factors, approximately 35% of people living in SEPA find it somewhat or very difficult to pay for housing related costs. This trend is consistent across counties and age groups. A high percentage of older adults own their own home (80%). This trend is consistent across counties.
+
+Philly has a higher percentage of people who did not complete high school (approximately 25%, compared to < 10% in other counties). Philly also has a lower percentage of college graduates compare to other counties (8% vs 13% average in the other counties)
+
+Commmunity participation was assessed by recording the number of organizations that a person was active in as well as by assessing their sense of belonging within their neighborhood community. Participation in community organizations was low overall. However, those who felt more of a  belonging to their community had a higher average group participation compared to those who felt that they did not belong to their community. 
+
+A very small percentage of the SEPA population reports being in poor health (5%) overall. When this is broken down by county, philadelphia has the higest percentage of people reporting poor health status (8% vs. a mean of 5% in other counties)
+
+Dental Services Utilization:
+On average, 64% of people in this area last visited the dentist less than 1 year ago. Examining ADA.REC by education: the group with less than high school education (0-11) has a much higher average for the non-ADA category. Additionally, the group with post-graduate training have a much lower average for the non-ADA category.
+
+When ADA.REC was analyzed in conjunction with each variable separately, notable group differences were observed for education, race, county, age, health status, insurance, ability to pay for housing, house ownership status, activities of daily living, and community participation. Of interest was the relationship between ADA.REC and county: At the county level, average utilization ADA service outside of the recommended frequency ranged from 25% in Montgomery to almost 50% in Philadelphia. With age, there were almost linear relationships between age and ADA.REC: as age increased, the mean for the non.ADA group also increased. Those aged 90 years old or more had the highest mean for the non.ADA category. 
+
+With ADA.REC and difficulty paying for housing costs, on average, 60% of those who reported “very difficult” did not see a dentist within the ADA recommended timeframe. Those that did not pay for housing reported the highest mean for the non.ADA group: 63% of people in this group did not see a dentist within the recommended timeframe.
+
+The univariate analysis for each variable revealed an association, based on a p-value < .10, between number of iADLs and ADLs, health status, community participation, county (Philly), beloning, community participation, RX coverage, insurance status, education, home ownership status, and difficulty in paying for housing. These variables were included in the multivariate model. Based on the results from the first model, a reduced model was created with number of ADL limitations, health status, community participation, county, education, insurance status RX coverage, and home ownership status, and difficulty in paying for housing. Sex was included even though it was not significant. AICs for each model were compared and model 1 had the lower value. Model fit statistics, indicated that nevertheless, the model was a poor fit for the outcome. 
+
+
+```{r}
+#-------DESCRIBING THE POPULATION -------
+#------AGE cat.
+tab.age<-svytable(~AGER2, Data.65.W) 
+margin.tab.age<-prop.table(tab.age)
+
+#------SEX ----
+tab.sex<-svytable(~SEX01, Data.65.W) 
+margin.tab.sex<-prop.table(tab.sex)
+
+tab.sex.age<-svytable(~SEX01 + AGER2, Data.65.W) 
+margin.tab.sex.age<-prop.table(tab.sex.age)
+barplot(tab.sex.age, beside=TRUE, col=topo.colors(2))
+
+#------RACE ---
+#White is the most common race in all counties, except Philadelphia. Compared to the other counties, Philadelphia has a large percentage of Blacks, Latinos, and Asians.
+tab.race.county<-(svytable(~RACEA2+COUNTY, Data.65.W))
+margin.tab.race.county<-prop.table(tab.race.county, 2)
+margin.tab.race.county<-margin.tab.race.county[ ,1:5]
+barplot(margin.tab.race.county, col=topo.colors(6), legend.text = c("White", "Black", "Latino", "Asian", "Biracial", "Native Am."), args.legend = list(x = "bottomright"))
+title(main = "Insured: race distribution by county", font.main = 4)
+
+#------INSURANCE STATUS --- 
+#---INSURED Y/N (INSUREDA)
+#how many are currently insured: Less than 1% are uninsured!
+tab.ins<-svytable(~INSUREDA, Data.65.W) 
+margin.tab.ins<-prop.table(tab.ins)
+
+#WHO are the uninsured? 
+#uninsured by county and age: All uninsured were women. Philly has the majority of uninsured older adults. Within Philly, all were Black, in the 65-69 age group and had were high school graduates. The county with the second highest percentage of uninsured was Montgomery. Within this county, all were between 65-69 years old, white, and were college graduates.  
+not_ins.subset<-subset(Data.65.W, (INSUREDA=="Not insured"))
+tab.noada.age<-svytable(~AGER2+COUNTY+RSPGRAD2+SEX01+RACEA2, not_ins.subset)
+
+#---uninsured by immigrant status: 100% of those NOT insured are NON-immigrants
+svytable(~Immigrant.Stat, subset(Data.65.W, subset=(INSUREDA=="Not insured")))
+
+#Almost 90% of people living in SEPA have RX coverage. This is similar across all counties. 
+tab.RX<-svytable(~RXCOV, Data.65.W)
+margin.tab.RX<-prop.table(tab.RX)
+tab.RX.county<-svytable(~RXCOV+COUNTY, Data.65.W) #adding county
+margin.tab.RX.county<-prop.table(tab.RX.county, 2)
+tab.RX.county.sex<-svytable(~RXCOV+COUNTY+SEX01, Data.65.W)#adding sex
+margin.tab.RX.county.sex<-prop.table(tab.RX.county.sex, 1) 
+
+#------EDUCATION ----  
+tab.edu<-svytable(~RSPGRAD2, Data.65.W) # overall, approx 85% have at least a high school education
+margin.tab.edu<-prop.table(tab.edu)
+
+# education by county: Philly has a higher percentage of people who did not complete high school (approximately 25%, compared to < 10% in other counties). Philly also has a lower percentage of college graduates compare to other counties (8% vs 13% average in the other counties)
+tab.edu.county<-svytable(~RSPGRAD2+COUNTY, Data.65.W) # overall, approx 35% have a high school education
+margin.tab.edu.county<-prop.table(tab.edu.county, 2)
+barplot(margin.tab.edu.county, col=topo.colors(6))
+title(main = "Education by County", font.main = 4)
+
+#------IMMIGRATION STATUS -------
+#Very few immigrants (8%)
+tab.immigrant<-svytable(~Immigrant.Stat, Data.65.W) 
+margin.tab.immigrant<-prop.table(tab.immigrant)
+
+#calculating percentage of patients who's last dental visit was close to ADA recommendations (e.g. every 6 months): --County-wide mean, on average, 64% of people in this area last visited the dentist less than 1 year ago.
+svymean(~ADA.REC, Data.65.W, se=T, na.rm=T, deff=T, ci=T, keep.vars=T) #County-wide mean, on average, 64% of people in this area last visited the dentist less than 1 year ago.
+
+#------COUNTY LEVEL
+#Looks like it varies between 24% and almost 50% based on these county groups.
+ada.county<-svyby(~ADA.REC, ~COUNTY, Data.65.W, svymean) #At the county level, average utilization ADA service outside of the recommended frequency ranges from 25% in Montgomery to almost 50% in Philadelphia
+
+#------ECONOMIC factors: housing ownership status, difficulty paying for housing
+#HOUSEPAY: Approximately 35% of people living in SEPA find it somewhat or very difficult to pay for housing related costs. This trend is consistent across counties and age groups
+tab.ECON.pay<-svytable(~HOUSPAY, Data.65.W)
+prop.table(tab.ECON.pay)
+
+#--housepay by county, age, race
+tab.ECON.pay.county<-svytable(~HOUSPAY+COUNTY, Data.65.W)
+margin.tab.ECON.pay.county<-prop.table(tab.ECON.pay.county, 2)
+barplot(margin.tab.ECON.pay.county, col=topo.colors(6))
+title(main = "Difficulty paying for housing by County", font.main = 4)
+
+tab.ECON.pay.age<-svytable(~HOUSPAY+AGER2, Data.65.W)
+margin.tab.ECON.pay.age<-prop.table(tab.ECON.pay.age, 2)
+barplot(margin.tab.ECON.pay.age, col=topo.colors(6))
+title(main = "Difficulty paying for housing by AGE", font.main = 4)
+
+#-- Home Ownership: MOST people living in SEPA own their own house (80%)
+tab.ECON.own<-svytable(~RENTOWN, Data.65.W)
+prop.table(tab.ECON.own)
+
+#there is very HIGH home ownership in each county. 
+tab.own.county<-svytable(~RENTOWN+COUNTY, Data.65.W)
+margin.tab.own.county<-prop.table(tab.own.county, 2)
+barplot(margin.tab.own.county, beside=TRUE, col=topo.colors(3))
+
+#---------HEALTH STATUS -----
+#A very small percentage of the SEPA population reports being in poor health (5%) overall. When this is broken down by county, philadelphia has the higest percentage of people reporting poor health status (8% vs. a mean of 5% in other counties)
+tab.health<-svytable(~HLTHA5, Data.65.W)
+margin.tab.health<-prop.table(tab.health)
+
+tab.health.county<-svytable(~HLTHA5+COUNTY, Data.65.W)
+margin.tab.health.county.c<-prop.table(tab.health.county, 2) #% by column
+margin.tab.health.county.r<-prop.table(tab.health.county, 1) #% by row
+barplot(margin.tab.health.county.c, main='Health status by county') #health status by county
+
+#---------COMMUNITY FACTORS: BELONGING AND PARTICIPATION (continuous)
+#Almost 10% don't feel like they belong to their community neighorhood.
+tab.belong<-svytable(~BELONG, Data.65.W)
+margin.tab.belong<-prop.table(tab.belong)
+
+tab.particip<-svytable(~PARTICIP, Data.65.W)
+margin.tab.particip<-prop.table(tab.particip)
+
+#those who felt more of a belonging to their community also participated in more groups, on average.
+svyboxplot(~PARTICIP~BELONG, Data.65.W,all.outliers=TRUE, 
+            varwidth=TRUE, 
+            ylab="Number of organizations", 
+            xlab=" " )
+
+#----------- iADL/ADL --------------
+#iADL: most people do not have iADL or ADL limitations. For iADLs, 71% report 0 limitations, whereas for ADLs, 88% report having no difficulty. 
+tab.i.ADL<-svytable(~NUMIADL, Data.65.W)
+prop.table(tab.i.ADL)
+
+tab.ADL<-svytable(~NUMADL, Data.65.W)
+prop.table(tab.ADL)
+
+#----------- ADA --------------
+tab.ADA<-svytable(~ADA.REC, Data.65.W) 
+margin.tab.ADA<-prop.table(tab.ADA)
+
+#ADA by EDUCATION: the group with less than high school education (0-11) looks very different from the other groups. Additionally, the group with post-graduate training have a much lower average for the non-ADA category. 
+ada.edu<-svyby(~ADA.REC, ~RSPGRAD2, Data.65.W, svymean)
+barplot(ada.edu, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by EDUCATION", font.main = 4)
+
+# --ADA by immigrant status :means for each category look similar between both groups 
+ada.immigrant<-svyby(~ADA.REC, ~Immigrant.Stat, Data.65.W, svymean)
+barplot(ada.immigrant, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by Immigration status", font.main = 4)
+
+#--ADA by RACE: Native American (#1), Blacks, and Latinos have the higest means for the low-utilization category.
+tab.race.ada<-(svytable(~ADA.REC+RACEA2, Data.65.W))
+margin.tab.race<-prop.table(tab.race.ada, 2)
+barplot(margin.tab.race, beside=TRUE, col=topo.colors(2), legend.text = c("within ADA", "Outside ADA"), args.legend = list(x = "bottomleft"))
+title(main = "Dental svc util. by race", font.main = 4)
+
+#--ADA by SEX: means for each category look similar across the sexes 
+ada.sex<-svyby(~ADA.REC, ~SEX01, Data.65.W, svymean)
+barplot(ada.sex, main="Dental Service Utilization by SEX", col=c("#006D2C", "#B2E2E2"), legend=TRUE) #ADA for both sexes looks similar
+
+#--ADA by COUNTY:
+#Looks like it varies between 24% and almost 50% based on these county groups.
+ada.county<-svyby(~ADA.REC, ~COUNTY, Data.65.W, svymean) #At the county level, average utilization ADA service outside of the recommended frequency ranges from 25% in Montgomery to almost 50% in Philadelphia
+barplot(ada.county, main="Dental Service Utilization by County", col=c("#006D2C", "#B2E2E2"), legend=FALSE) #PHILADELPHIA LOOKS DIFFERENT
+
+#ADA by AGE: those older than 75 years have higher means for the non-ADA category, with those in the 90+ age range having the highest mean overall for this category.
+tab.age<-svyby(~ADA.REC, ~AGER2, Data.65.W, svymean)
+barplot(tab.age, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by AGE", font.main = 4)
+
+#ADA by health status: Those who reported fair or poor health had higher means for the non.ADA category. There appeared to be a converse relationship between the two variables across health status: moving from excellent to poor, mean for the non.ADA category increased.
+ada.health<-svyby(~ADA.REC, ~HLTHA5, Data.65.W, svymean)
+barplot(ada.health, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by health status", font.main = 4)
+
+#ADA by INSURANCE:
+#--Medical insurance: 100% of those not insured did not seek dental health services within the ADA recommended timeframe, which is very different from the insured group. For the insured group, 36% did not seek dental services in the ADA recommended timeframe. 
+ada.ins<-svyby(~ADA.REC, ~INSUREDA, Data.65.W, svymean)
+barplot(ada.ins, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by INSURANCE status", font.main = 4)
+
+#--RX coverage: those who do not hav RX coverage have a higher mean for the non-ADA category. Both groups look very differnt.
+ada.RX<-svyby(~ADA.REC, ~RXCOV, Data.65.W, svymean)
+barplot(ada.RX, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by prescription coverage status", font.main = 4)
+
+
+#---ADA by economic factors:
+#--Houspay: difficulty paying for housing costs: there was a inverse relationship between houspay and the non.ADA category. On average, 60% of of the people who responnded "very difficult" did not see the dentist within the ADA recommended timeframe. Those that did not pay for housing reported the highest mean for the non.ADA group: 63% of people in this group did not see a dentist within the recommended timeframe.
+svyby(~ADA.REC, ~HOUSPAY, Data.65.W, svymean)
+ada.econ.pay<-svyby(~ADA.REC, ~HOUSPAY, Data.65.W, svymean)
+barplot(ada.econ.pay, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by difficulty paying for housing costs", font.main = 4)
+
+#-RENTOWN by ADA.REC: Even though people who rent are similar to those who own in terms of difficulty paying for housing, those who RENT have a high average for the non-ADA category! 
+ada.own<-svyby(~ADA.REC, ~RENTOWN, Data.65.W, svymean)
+barplot(ada.own, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by homeownership status", font.main = 4)
+
+#---ADA by ADL and iADL limitations  
+#The plots show that as the number of limitations increase, the percentage of people who did not see the dentist within the ADA recommended timeframe also increases.
+svytable(~NUMIADL, Data.65.W)
+tab.i.ADL<-svytable(~NUMIADL, Data.65.W)
+tab.ada.i.ADL<-svytable(~ADA.REC+NUMIADL, Data.65.W)
+margin.tab.ada.i.ADL<-prop.table(tab.ada.i.ADL, 2)
+barplot(margin.tab.ada.i.ADL, main='ADA.REC by Number of iADL limitations') 
+
+svytable(~NUMADL, Data.65.W)
+tab.ADL<-svytable(~NUMADL, Data.65.W)
+tab.ada.ADL<-svytable(~ADA.REC+NUMADL, Data.65.W)
+margin.tab.ada.ADL<-prop.table(tab.ada.ADL, 2)
+barplot(margin.tab.ada.ADL, main='ADA.REC by Number of ADL limitations') 
+
+svyboxplot(~NUMIADL~ADA.REC, Data.65.W, all.outliers=TRUE, col=c("Blue", "Orange"), medcol="yellow", 
+            varwidth=TRUE, 
+            ylab="Number of iADL limitations", 
+            xlab=" " )
+
+svyboxplot(~NUMADL~ADA.REC, Data.65.W, all.outliers=TRUE, col=c("Blue", "Orange"), medcol="yellow", 
+            varwidth=TRUE, 
+            ylab="Number of ADL limitations", 
+            xlab=" " )
+
+#ADA by community participation and belonging
+#Those who don't feel like they belong to their community neighorhood had higher means for the non-ADA category.
+ada.belong<-svyby(~ADA.REC, ~BELONG, Data.65.W, svymean)
+barplot(ada.belong, beside=TRUE, col=topo.colors(2))
+title(main = "Dental svc util. by community belonging", font.main = 4)
+
+#Examining participation in activities (PARTICIP): The median for the non-ADA group is lower, which means that people in this group participate, on average, in fewer community groups. Additionally, the IQR is lower for the non-ADA group. This may indicate that there is a relationship that should be further explored (i.e. that ADA.REC is associated with participation).
+svyboxplot(~PARTICIP~ADA.REC, Data.65.W,all.outliers=TRUE, col=c("Blue", "Orange"), medcol="yellow", 
+            varwidth=TRUE, 
+            ylab="Number of organizations", 
+            xlab=" " )
+```
+Univariate analysis
+```{r}
+#-----ADA & AGE: p-value = 0.03707
+svychisq(~ADA.REC+AGER2, Data.65.W, statistic = "Chisq")
+
+#----ADA & INSURANCE: p-value = 0.03654
+svychisq(~ADA.REC+INSUREDA, Data.65.W, statistic = "Chisq")
+
+#----ADA & RX COVERAGE: p-value = 5.798e-05
+svychisq(~ADA.REC+RXCOV, Data.65.W, statistic = "Chisq")
+
+#----ADA & COUNTY: p-value = 1.046e-10
+svychisq(~ADA.REC+COUNTY, Data.65.W, statistic = "Chisq")
+
+#----ADA & EDUCATION: p-value < 2.2e-16
+svychisq(~ADA.REC+RSPGRAD2, Data.65.W, statistic = "Chisq") 
+
+#----ADA & HOUSPAY: p-value = 1.689e-10
+svychisq(~ADA.REC+HOUSPAY, Data.65.W, statistic = "Chisq")
+
+#----ADA & RENTOWN: p-value = 5.814e-05
+svychisq(~ADA.REC+RENTOWN, Data.65.W, statistic = "Chisq")
+
+#----ADA & HEALTH STATUS (HLTHA5): p-value = 3.641e-13
+svychisq(~ADA.REC+HLTHA5, Data.65.W, statistic = "Chisq")
+
+#----ADA & BELONGING: p-value = 0.002536
+svychisq(~ADA.REC+BELONG, Data.65.W, statistic = "Chisq")
+
+#----ADA & PARTICIPATION: p-value = 5.188e-08
+svychisq(~ADA.REC+PARTICIP, Data.65.W, statistic = "Chisq")
+
+#----ADA & NUMIADL & NUMADL: BOTH P-VALUES < 0.05
+glm.i.ADL<-svyglm(ADA.REC~NUMIADL, design=Data.65.W, family=quasibinomial) 
+summary(glm.i.ADL) #p-value = 4.6e-09 
+summary(svyglm(ADA.REC~NUMADL, design=Data.65.W, family=quasibinomial)) #6.71e-06
+
+#-----ADA & SEX: p-value = 0.181 --> NOT SIGNIFICANT, BUT WILL STILL INCLUDE SEX IN MODEL
+svychisq(~ADA.REC+SEX01, Data.65.W, statistic = "Chisq")
+
+#-----ADA & Immigrant status: p-value = 0.5136
+svychisq(~ADA.REC+Immigrant.Stat, Data.65.W, statistic = "Chisq")
+
+```
+
+MODELS
+```{r}
+#hThe univariate analysis for each variable revealed an association, based on a p-value < .10, between ADA.REC and the number of iADLs and ADLs, health status, community participation, county (Philly), beloning, community participation, RX coverage, insurance status, education, home ownership status, and difficulty in paying for housing.
+model_1 <- svyglm(ADA.REC ~ SEX01 + NUMIADL + NUMADL + HLTHA5 + PARTICIP + BELONG + COUNTY + RSPGRAD2 + RXCOV + INSUREDA + HOUSPAY + RENTOWN, design = Data.65.W, family=quasibinomial)
+summary(model_1)
+exp(cbind(OR = coef(model_1), confint(model_1)))## odds ratios and 95% CI. 
+#For RX insurance coverage, the odds of non.ADA_REC are are 1.76  times higher for a person who does not have RX coverage versus a person who does have RX insurance coverage, when comparing people of the same background.
+#The odds of of a 90+ year old is about 1.32 times (CI: .654, 2.698) higher than for a 65-69 year old
+
+AIC(model_1)
+
+#Generalized linear models are freed from the assumption that residuals are normally distributed with equal variance, but the method nevertheless makes important assumptions that should be checked.
+plot(model_1) # deviance residuals, q-q, leverage
+
+library(visreg)
+visreg(model_1, xvar = "ADA.REC")#function for visualizing regression models quickly and easily. Default plots contain a confidence band, prediction line, and partial residuals.
+
+#Reduced model: cut off variables with a p-value > .10. Will keep NUMADL, HLTHA5, PARTICIP, COUNTY, RSPGRAD2, RXCOV, INSUREDA, HOUSPAY, AND RENTOWN. Will also include sex as before.
+model_2<-svyglm(ADA.REC ~ SEX01 + NUMADL + HLTHA5 + PARTICIP + COUNTY + RSPGRAD2 + RXCOV + INSUREDA + HOUSPAY + RENTOWN, design = Data.65.W, family=quasibinomial)
+summary(model_2)
+exp(cbind(OR = coef(model_2), confint(model_2)))## odds ratios and 95% CI. 
+plot(model_2)
+
+AIC(model_2)
+
+#AIC----------- Comparing the models: Models have similar AUCs, but MODEL 1 has a smaller AIC.
+AIC(model_1, model_2)
+
+#Fit
+sum(residuals(model_1, type = "pearson")^2)
+deviance(model_1)
+1 - pchisq(deviance(model_1), df.residual(model_1)): The p-value is very small, indicating evidence of lack of fit.
+```
+
+
